@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nput Overlay</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Root layout ── */
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      /* Transparent so the Electron window shows through everywhere
+         the canvas doesn't draw.  Main sets backgroundColor: #00000000. */
+      background: transparent;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: #d0d0d0;
+    }
+
+    /* ── Header ── */
+    #header {
+      height: 34px; /* must match HEADER_H in main.ts */
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      background: rgba(18, 18, 22, 0.92);
+      border-bottom: 1px solid #2a2a2a;
+      /* Draggable title-bar area — buttons override this below */
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    /* All interactive elements must opt out of drag */
+    #header button,
+    #header span {
+      -webkit-app-region: no-drag;
+    }
+
+    #title {
+      font-weight: bold;
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: #fff;
+    }
+
+    #status {
+      flex: 1;
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #status.connecting   { color: #f0a500; }
+    #status.connected    { color: #4caf50; }
+    #status.disconnected { color: #f44336; }
+
+    /* Shared button style */
+    .hbtn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: #bbb;
+      font-family: inherit;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s, color 0.12s;
+    }
+    .hbtn:hover { background: rgba(255,255,255,0.14); color: #fff; }
+
+    /* Lock button gets a slightly different accent so it's obvious */
+    #lock-btn { border-color: rgba(255,140,0,0.30); }
+    #lock-btn:hover { background: rgba(255,140,0,0.18); color: #ffa040; }
+
+    #counter-area {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: #555;
+    }
+    #count {
+      font-size: 13px;
+      font-weight: bold;
+      color: #7ec8e3;
+      min-width: 40px;
+      text-align: right;
+    }
+
+    /* ── Canvas area ── */
+    #canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    #overlay {
+      display: block;
+      /* Let the browser scale the canvas down if the window is smaller
+         than the canvas pixel dimensions — highlights stay accurate. */
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    /* ── Locked overlay mode ── */
+    /* The header disappears and the canvas takes everything. */
+    body.locked #header { display: none; }
+    body.locked #canvas-wrap { padding: 0; }
+
+    /* ── Dark mode UI tint ── */
+    /* The canvas handles dark-mode drawing itself.  These rules just
+       tint the header to match so it doesn't look out of place. */
+    body.dark-mode #header {
+      background: rgba(4, 4, 8, 0.95);
+      border-bottom-color: #111;
+    }
+    body.dark-mode #title  { color: #9be; }
+    body.dark-mode #status.connected { color: #5df0a0; }
+    body.dark-mode .hbtn   { border-color: rgba(80,180,255,0.20); }
+    body.dark-mode .hbtn:hover { background: rgba(80,180,255,0.18); color: #9de; }
+    body.dark-mode #count  { color: #5ad; }
+
+    /* ── Window controls (top-right) ── */
+    #win-controls {
+      display: flex;
+      gap: 3px;
+      margin-left: 6px;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+    }
+    .wbtn {
+      width: 24px;
+      height: 20px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: #666;
+      font-size: 11px;
+      border-radius: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: inherit;
+      line-height: 1;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+    #win-min:hover   { background: rgba(255,255,255,0.14); color: #ccc; }
+    #win-close:hover { background: rgba(200,40,40,0.65); border-color: rgba(200,40,40,0.8); color: #fff; }
+
+    /* ── Right-click context menu ── */
+    #ctx-menu {
+      position: fixed;
+      z-index: 9999;
+      background: rgba(12, 12, 16, 0.97);
+      border: 1px solid rgba(255,255,255,0.11);
+      border-radius: 6px;
+      padding: 4px 0;
+      min-width: 190px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.70);
+      display: none;
+      font-size: 11px;
+      color: #bbb;
+      user-select: none;
+    }
+    .ctx-item {
+      padding: 6px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      transition: background 0.08s, color 0.08s;
+    }
+    .ctx-item:hover { background: rgba(255,255,255,0.09); color: #fff; }
+    .ctx-item.danger { color: #a66; }
+    .ctx-item.danger:hover { background: rgba(200,40,40,0.25); color: #f88; }
+    .ctx-sep {
+      height: 1px;
+      background: rgba(255,255,255,0.08);
+      margin: 4px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="header">
+    <span id="title">NPUT</span>
+    <span id="status" class="connecting">● Connecting…</span>
+
+    <!-- Mode toggle -->
+    <button id="mode-btn"  class="hbtn" title="Switch keyboard / controller">🎮 Controller</button>
+
+    <!-- Dark mode toggle — state persists via localStorage -->
+    <button id="dark-btn"  class="hbtn" title="Switch to dark mode">🌙 Dark</button>
+
+    <!-- Lock — hides header and enables click-through.
+         Use Ctrl+Alt+O to unlock from the outside. -->
+    <button id="lock-btn"  class="hbtn" title="Lock overlay (Ctrl+Alt+O to unlock)">🔒 Lock</button>
+
+    <div id="counter-area">
+      <span>inputs</span>
+      <span id="count">0</span>
+    </div>
+
+    <div id="win-controls">
+      <button class="wbtn" id="win-min"   title="Minimize">&#8211;</button>
+      <button class="wbtn" id="win-close" title="Quit">&#x2715;</button>
+    </div>
+  </div>
+
+  <!-- Right-click context menu -->
+  <div id="ctx-menu">
+    <div class="ctx-item" id="ctx-mode">🎮 Switch to Controller</div>
+    <div class="ctx-item" id="ctx-layout">🎮 Layout: Xbox 360</div>
+    <div class="ctx-item" id="ctx-dark">🌙 Dark Mode</div>
+    <div class="ctx-item" id="ctx-lock">🔒 Lock Inputs</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" id="ctx-min">&#8211; Minimize</div>
+    <div class="ctx-item danger" id="ctx-quit">&#x2715; Quit</div>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <script src="./renderer.js"></script>
+</body>
+</html>

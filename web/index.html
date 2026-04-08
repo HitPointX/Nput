@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Nput web overlay — served by the Rust HTTP server on port 8766.
+
+    OBS setup:
+      Add Source → Browser Source → http://localhost:8766
+      Width / height: match the layout (keyboard=1078×375, controller=479×310)
+      Set Custom CSS: body { background-color: rgba(0,0,0,0) !important; }
+      ✓ Shutdown source when not visible
+      ✓ Refresh browser when scene becomes active
+
+    URL query params (all optional):
+      ?mode=keyboard | controller   pin the display to one mode
+      ?dark=1                        dark mode (great for OBS chroma key setups)
+      ?obs=1                         hides the control bar for clean capture
+      ?ws=ws://HOST:PORT             override WebSocket address
+
+    Regular browser:
+      Just open http://localhost:8766 — the control bar lets you toggle
+      mode and dark mode interactively.
+  -->
+  <title>Nput Overlay</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Transparent background so OBS chroma / luma key works cleanly.
+       On OBS the browser source itself clips the frame — set the source
+       size to the exact canvas dimensions. */
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: #d0d0d0;
+    }
+
+    /* ── Control bar (hidden with ?obs=1) ── */
+    #control-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      background: rgba(18, 18, 22, 0.92);
+      border-bottom: 1px solid #2a2a2a;
+      user-select: none;
+    }
+
+    #title {
+      font-weight: bold;
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: #fff;
+    }
+
+    #status {
+      flex: 1;
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #status.connecting   { color: #f0a500; }
+    #status.connected    { color: #4caf50; }
+    #status.disconnected { color: #f44336; }
+
+    .hbtn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: #bbb;
+      font-family: inherit;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s, color 0.12s;
+    }
+    .hbtn:hover { background: rgba(255,255,255,0.14); color: #fff; }
+
+    #counter-area {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: #555;
+    }
+    #count {
+      font-size: 13px;
+      font-weight: bold;
+      color: #7ec8e3;
+      min-width: 40px;
+      text-align: right;
+    }
+
+    /* ── Canvas area ── */
+    #canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    /* The canvas sets its own pixel dimensions — don't let CSS scale it
+       or the click hit-zones will drift from the visual positions. */
+    #overlay {
+      display: block;
+    }
+
+    /* ── Dark mode header tint ── */
+    body.dark-mode #control-bar {
+      background: rgba(4, 4, 8, 0.95);
+      border-bottom-color: #111;
+    }
+    body.dark-mode #title  { color: #9be; }
+    body.dark-mode #status.connected { color: #5df0a0; }
+    body.dark-mode .hbtn   { border-color: rgba(80,180,255,0.20); }
+    body.dark-mode .hbtn:hover { background: rgba(80,180,255,0.18); color: #9de; }
+    body.dark-mode #count  { color: #5ad; }
+  </style>
+</head>
+<body>
+
+  <!-- Control bar — hidden automatically with ?obs=1 -->
+  <div id="control-bar">
+    <span id="title">NPUT</span>
+    <span id="status" class="connecting">● Connecting…</span>
+
+    <button id="mode-btn" class="hbtn" title="Switch keyboard / controller">🎮 Controller</button>
+    <button id="dark-btn" class="hbtn" title="Switch to dark mode">🌙 Dark</button>
+
+    <div id="counter-area">
+      <span>inputs</span>
+      <span id="count">0</span>
+    </div>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <!-- web-renderer.js is compiled from web-renderer.ts and placed here
+       by `tsc -p frontend/tsconfig.web.json` during the build. -->
+  <script type="module" src="./web-renderer.js"></script>
+</body>
+</html>

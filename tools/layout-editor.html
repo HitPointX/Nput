@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Nput Layout Editor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Top toolbar ── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: #111;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    #toolbar h1 { font-size: 14px; color: #7ec8e3; letter-spacing: 2px; }
+    .sep { width: 1px; height: 24px; background: #333; }
+
+    label { color: #888; font-size: 11px; }
+    input[type=text], select {
+      background: #222;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 3px 7px;
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    input[type=text]:focus, select:focus { border-color: #7ec8e3; outline: none; }
+
+    button {
+      background: #2a2a2a;
+      border: 1px solid #444;
+      color: #ccc;
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    button:hover { background: #3a3a3a; color: #fff; }
+    button.primary { border-color: #7ec8e3; color: #7ec8e3; }
+    button.primary:hover { background: rgba(126,200,227,0.15); }
+    button.danger { border-color: #f44; color: #f44; }
+    button.danger:hover { background: rgba(255,68,68,0.15); }
+
+    #mode-tabs { display: flex; gap: 4px; }
+    #mode-tabs button.active { background: #3a3a3a; border-color: #7ec8e3; color: #7ec8e3; }
+
+    #edit-mode-tabs { display: flex; gap: 4px; }
+    #edit-mode-tabs button { min-width: 70px; }
+    #edit-mode-tabs button.active {
+      background: #3a2a10;
+      border-color: #f0a040;
+      color: #f0a040;
+    }
+
+    #key-label { width: 120px; }
+    #draw-mode-select { width: 110px; }
+
+    #draw-controls { display: flex; align-items: center; gap: 8px; }
+    #move-controls  { display: none; align-items: center; gap: 8px; }
+
+    #hint {
+      margin-left: auto;
+      color: #555;
+      font-size: 11px;
+    }
+
+    /* ── Main area ── */
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Canvas panel ── */
+    #canvas-panel {
+      flex: 1;
+      overflow: auto;
+      background: #222;
+      position: relative;
+    }
+    #canvas-wrap {
+      position: relative;
+      display: inline-block;
+    }
+    #base-img {
+      display: block;
+      user-select: none;
+    }
+    #overlay-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      pointer-events: none;
+    }
+    #interaction-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      cursor: crosshair;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      background: #111;
+      border-left: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #sidebar-header {
+      padding: 8px 12px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #sidebar-header span { flex: 1; font-size: 11px; color: #888; }
+    #entry-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+    .entry {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-bottom: 1px solid #1e1e1e;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .entry:hover { background: #1a1a1a; }
+    .entry.selected { background: #1e2e3a; }
+    .entry-name { color: #7ec8e3; min-width: 60px; }
+    .entry-pos  { color: #666; flex: 1; }
+    .entry-del  {
+      color: #555; cursor: pointer; padding: 0 4px;
+      visibility: hidden;
+    }
+    .entry:hover .entry-del { visibility: visible; }
+    .entry-del:hover { color: #f44; }
+
+    /* ── Export panel ── */
+    #export-panel {
+      border-top: 1px solid #333;
+      padding: 10px;
+      background: #0e0e0e;
+    }
+    #export-panel textarea {
+      width: 100%;
+      height: 80px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #7ec8e3;
+      font-family: inherit;
+      font-size: 10px;
+      resize: none;
+      padding: 6px;
+      border-radius: 3px;
+    }
+    #export-panel .row { display: flex; gap: 6px; margin-top: 6px; }
+
+    /* ── Status bar ── */
+    #statusbar {
+      padding: 3px 14px;
+      background: #0e0e0e;
+      border-top: 1px solid #222;
+      font-size: 10px;
+      color: #555;
+      display: flex;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    #statusbar span.coord { color: #888; }
+
+    /* Drag rectangle (draw mode) */
+    #drag-rect {
+      position: absolute;
+      border: 2px dashed #7ec8e3;
+      background: rgba(126,200,227,0.1);
+      pointer-events: none;
+      display: none;
+    }
+
+    /* Move mode cursor */
+    #interaction-canvas.move-mode  { cursor: default; }
+    #interaction-canvas.move-hover { cursor: move; }
+    #interaction-canvas.move-drag  { cursor: grabbing; }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>NPUT LAYOUT EDITOR</h1>
+  <div class="sep"></div>
+
+  <div id="mode-tabs">
+    <button id="tab-keyboard" class="active" onclick="switchMode('keyboard')">⌨ Keyboard</button>
+    <button id="tab-controller" onclick="switchMode('controller')">🎮 Controller</button>
+  </div>
+  <div class="sep"></div>
+
+  <label>Image:</label>
+  <button onclick="document.getElementById('img-upload').click()">📂 Load image</button>
+  <input type="file" id="img-upload" accept="image/*" style="display:none" onchange="loadImage(event)"/>
+  <div class="sep"></div>
+
+  <!-- Draw / Move mode toggle -->
+  <div id="edit-mode-tabs">
+    <button id="etab-draw" class="active" onclick="setEditMode('draw')" title="D">✏ Draw</button>
+    <button id="etab-move" onclick="setEditMode('move')" title="M">✥ Move</button>
+  </div>
+  <div class="sep"></div>
+
+  <!-- Draw-mode controls -->
+  <div id="draw-controls">
+    <label>Key name:</label>
+    <input type="text" id="key-label" placeholder="e.g. A, Enter, Shift" autocomplete="off" />
+    <label>Shape:</label>
+    <select id="draw-mode-select">
+      <option value="rect">Rectangle</option>
+      <option value="circle">Circle</option>
+      <option value="point">Point</option>
+    </select>
+  </div>
+
+  <!-- Move-mode controls -->
+  <div id="move-controls">
+    <label style="color:#f0a040">Click to select · Drag to reposition · Del to remove</label>
+  </div>
+  <div class="sep"></div>
+
+  <button class="primary" onclick="exportJSON()">⬇ Export JSON</button>
+  <button class="danger"  onclick="clearAll()">✕ Clear all</button>
+  <div class="sep"></div>
+  <button onclick="loadExistingLayout()">📥 Load layout.json</button>
+
+  <span id="hint">Click/drag on the image to place keys</span>
+</div>
+
+<div id="main">
+  <div id="canvas-panel">
+    <div id="canvas-wrap">
+      <img id="base-img" src="" alt="" draggable="false" onload="onImageLoad()" />
+      <canvas id="overlay-canvas"></canvas>
+      <canvas id="interaction-canvas"
+        onmousedown="onMouseDown(event)"
+        onmousemove="onMouseMove(event)"
+        onmouseup="onMouseUp(event)"></canvas>
+      <div id="drag-rect"></div>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <span id="entry-count">0 entries</span>
+      <button onclick="sortEntries()">Sort</button>
+    </div>
+    <div id="entry-list"></div>
+    <div id="export-panel">
+      <div style="font-size:11px;color:#888;margin-bottom:4px">JSON preview (paste into layout.json)</div>
+      <textarea id="json-preview" readonly></textarea>
+      <div class="row">
+        <button class="primary" style="flex:1" onclick="copyJSON()">Copy JSON</button>
+        <button style="flex:1" onclick="downloadJSON()">Download</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="drag-rect"></div>
+
+<div id="statusbar">
+  <span>Mode: <b id="status-mode">keyboard</b></span>
+  <span class="coord" id="status-xy">x=0 y=0</span>
+  <span id="status-msg">Load an image to begin</span>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────
+
+let mode     = 'keyboard';   // 'keyboard' | 'controller'
+let editMode = 'draw';        // 'draw' | 'move'
+let entries  = { keyboard: [], controller: [] };
+let selectedIdx  = -1;
+let hoveredIdx   = -1;
+
+// draw mode
+let isDragging = false;
+let dragStart  = null;
+
+// move mode
+let isMoving    = false;
+let moveOffsetX = 0;
+let moveOffsetY = 0;
+
+let imgNaturalW = 1, imgNaturalH = 1;
+
+// ── Mode switches ─────────────────────────────────────────────
+
+function switchMode(m) {
+  mode = m;
+  document.getElementById('tab-keyboard').classList.toggle('active', m === 'keyboard');
+  document.getElementById('tab-controller').classList.toggle('active', m === 'controller');
+  document.getElementById('status-mode').textContent = m;
+  document.getElementById('draw-mode-select').value =
+    m === 'controller' ? 'circle' : 'rect';
+  selectedIdx = hoveredIdx = -1;
+  renderOverlay();
+  renderSidebar();
+}
+
+function setEditMode(em) {
+  editMode = em;
+  document.getElementById('etab-draw').classList.toggle('active', em === 'draw');
+  document.getElementById('etab-move').classList.toggle('active', em === 'move');
+  document.getElementById('draw-controls').style.display = em === 'draw' ? 'flex' : 'none';
+  document.getElementById('move-controls').style.display = em === 'move' ? 'flex' : 'none';
+  const ic = document.getElementById('interaction-canvas');
+  ic.className = em === 'move' ? 'move-mode' : '';
+  // kill any in-progress draw
+  isDragging = false;
+  isMoving = false;
+  document.getElementById('drag-rect').style.display = 'none';
+  setStatus(em === 'move'
+    ? 'Move mode — click to select, drag to reposition  (shortcut: M / D)'
+    : 'Draw mode — type a key name then click/drag on the image  (shortcut: D / M)');
+}
+
+// ── Image loading ────────────────────────────────────────────
+
+function loadImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = document.getElementById('base-img');
+  img.src = url;
+  setStatus(`Loaded: ${file.name}`);
+}
+
+function onImageLoad() {
+  const img = document.getElementById('base-img');
+  imgNaturalW = img.naturalWidth;
+  imgNaturalH = img.naturalHeight;
+  const w = img.offsetWidth || img.naturalWidth;
+  const h = img.offsetHeight || img.naturalHeight;
+  const oc = document.getElementById('overlay-canvas');
+  const ic = document.getElementById('interaction-canvas');
+  oc.width = ic.width = img.naturalWidth;
+  oc.height = ic.height = img.naturalHeight;
+  oc.style.width = ic.style.width = img.style.width = img.naturalWidth + 'px';
+  oc.style.height = ic.style.height = img.style.height = img.naturalHeight + 'px';
+  renderOverlay();
+  setStatus(`Image loaded: ${img.naturalWidth}×${img.naturalHeight}`);
+}
+
+// ── Mouse interaction ────────────────────────────────────────
+
+function canvasCoords(event) {
+  const ic = document.getElementById('interaction-canvas');
+  const rect = ic.getBoundingClientRect();
+  const scaleX = ic.width / rect.width;
+  const scaleY = ic.height / rect.height;
+  return {
+    x: Math.round((event.clientX - rect.left) * scaleX),
+    y: Math.round((event.clientY - rect.top) * scaleY),
+  };
+}
+
+// Returns index of topmost entry under (px,py), or -1
+function hitTest(px, py) {
+  for (let i = entries[mode].length - 1; i >= 0; i--) {
+    const e = entries[mode][i];
+    if (e.r !== undefined) {
+      const dx = px - e.x, dy = py - e.y;
+      if (dx * dx + dy * dy <= e.r * e.r) return i;
+    } else if (e.w !== undefined) {
+      if (px >= e.x - e.w / 2 && px <= e.x + e.w / 2 &&
+          py >= e.y - e.h / 2 && py <= e.y + e.h / 2) return i;
+    } else {
+      const dx = px - e.x, dy = py - e.y;
+      if (dx * dx + dy * dy <= 64) return i; // 8px hit radius for points
+    }
+  }
+  return -1;
+}
+
+function onMouseDown(event) {
+  const pt = canvasCoords(event);
+
+  if (editMode === 'move') {
+    const idx = hitTest(pt.x, pt.y);
+    if (idx >= 0) {
+      selectedIdx = idx;
+      isMoving = true;
+      const e = entries[mode][idx];
+      moveOffsetX = pt.x - e.x;
+      moveOffsetY = pt.y - e.y;
+      document.getElementById('interaction-canvas').className = 'move-drag';
+    } else {
+      selectedIdx = -1;
+    }
+    renderOverlay();
+    renderSidebar();
+    return;
+  }
+
+  // Draw mode
+  const dm = document.getElementById('draw-mode-select').value;
+  if (dm === 'point') {
+    placeEntry(pt.x, pt.y, null);
+    return;
+  }
+  isDragging = true;
+  dragStart = pt;
+  const dr = document.getElementById('drag-rect');
+  dr.style.display = 'block';
+  dr.style.left = pt.x + 'px';
+  dr.style.top  = pt.y + 'px';
+  dr.style.width = '0';
+  dr.style.height = '0';
+}
+
+function onMouseMove(event) {
+  const pt = canvasCoords(event);
+  document.getElementById('status-xy').textContent = `x=${pt.x} y=${pt.y}`;
+
+  if (editMode === 'move') {
+    if (isMoving && selectedIdx >= 0) {
+      const e = entries[mode][selectedIdx];
+      e.x = pt.x - moveOffsetX;
+      e.y = pt.y - moveOffsetY;
+      renderOverlay();
+      renderSidebar();
+    } else {
+      const idx = hitTest(pt.x, pt.y);
+      if (idx !== hoveredIdx) {
+        hoveredIdx = idx;
+        const ic = document.getElementById('interaction-canvas');
+        ic.className = idx >= 0 ? 'move-hover' : 'move-mode';
+        renderOverlay();
+      }
+    }
+    return;
+  }
+
+  // Draw mode
+  if (!isDragging || !dragStart) return;
+  const dr = document.getElementById('drag-rect');
+  const x = Math.min(pt.x, dragStart.x);
+  const y = Math.min(pt.y, dragStart.y);
+  const w = Math.abs(pt.x - dragStart.x);
+  const h = Math.abs(pt.y - dragStart.y);
+  dr.style.left = x + 'px';
+  dr.style.top  = y + 'px';
+  dr.style.width  = w + 'px';
+  dr.style.height = h + 'px';
+}
+
+function onMouseUp(event) {
+  if (editMode === 'move') {
+    if (isMoving && selectedIdx >= 0) {
+      isMoving = false;
+      const e = entries[mode][selectedIdx];
+      // snap to integer coords
+      e.x = Math.round(e.x);
+      e.y = Math.round(e.y);
+      document.getElementById('interaction-canvas').className = 'move-hover';
+      updatePreview();
+      renderOverlay();
+      renderSidebar();
+      setStatus(`Moved: ${e.name} → (${e.x}, ${e.y})`);
+    }
+    return;
+  }
+
+  // Draw mode
+  if (!isDragging) return;
+  isDragging = false;
+  document.getElementById('drag-rect').style.display = 'none';
+
+  const pt = canvasCoords(event);
+  const dm = document.getElementById('draw-mode-select').value;
+  const x = Math.min(pt.x, dragStart.x);
+  const y = Math.min(pt.y, dragStart.y);
+  const w = Math.abs(pt.x - dragStart.x);
+  const h = Math.abs(pt.y - dragStart.y);
+
+  if (w < 4 && h < 4) {
+    // Treat tiny drag as a point click
+    placeEntry(Math.round((pt.x + dragStart.x) / 2), Math.round((pt.y + dragStart.y) / 2), null);
+    return;
+  }
+
+  placeEntry(
+    Math.round(x + w / 2),
+    Math.round(y + h / 2),
+    dm === 'circle'
+      ? { r: Math.round((w + h) / 4) }   // average of w/2 and h/2
+      : { w: Math.round(w), h: Math.round(h) }
+  );
+}
+
+// ── Entry management ─────────────────────────────────────────
+
+function placeEntry(cx, cy, size) {
+  const name = document.getElementById('key-label').value.trim();
+  if (!name) {
+    setStatus('⚠ Enter a key name first!');
+    document.getElementById('key-label').focus();
+    return;
+  }
+
+  const existing = entries[mode].findIndex(e => e.name === name);
+  const entry = { name, x: cx, y: cy, ...size };
+
+  if (existing >= 0) {
+    entries[mode][existing] = entry;
+    setStatus(`Updated: ${name}`);
+  } else {
+    entries[mode].push(entry);
+    setStatus(`Placed: ${name} at (${cx}, ${cy})`);
+  }
+
+  renderOverlay();
+  renderSidebar();
+  updatePreview();
+
+  // Auto-advance to next key in sequence if possible
+  autoAdvanceKey(name);
+}
+
+function autoAdvanceKey(placed) {
+  // If this looks like a single letter, advance to next
+  const letters = 'QWERTYUIOPASDFGHJKLZXCVBNM';
+  const idx = letters.indexOf(placed.toUpperCase());
+  if (idx >= 0 && idx < letters.length - 1) {
+    document.getElementById('key-label').value = letters[idx + 1];
+  }
+}
+
+function deleteEntry(idx) {
+  entries[mode].splice(idx, 1);
+  renderOverlay();
+  renderSidebar();
+  updatePreview();
+}
+
+function selectEntry(idx) {
+  selectedIdx = idx;
+  const e = entries[mode][idx];
+  document.getElementById('key-label').value = e.name;
+  renderOverlay();
+  renderSidebar();
+}
+
+function clearAll() {
+  if (!confirm(`Clear all ${mode} entries?`)) return;
+  entries[mode] = [];
+  renderOverlay();
+  renderSidebar();
+  updatePreview();
+}
+
+function sortEntries() {
+  entries[mode].sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
+  renderSidebar();
+  updatePreview();
+}
+
+// ── Canvas rendering ─────────────────────────────────────────
+
+function renderOverlay() {
+  const oc = document.getElementById('overlay-canvas');
+  const ctx = oc.getContext('2d');
+  ctx.clearRect(0, 0, oc.width, oc.height);
+
+  entries[mode].forEach((e, i) => {
+    const isSelected = i === selectedIdx;
+    const isHovered  = i === hoveredIdx && editMode === 'move' && !isMoving;
+
+    let rgb, lineW;
+    if (isSelected)     { rgb = '255,255,255'; lineW = 2;   }
+    else if (isHovered) { rgb = '240,160,64';  lineW = 1.5; }
+    else                { rgb = '126,200,227'; lineW = 1.5; }
+
+    ctx.strokeStyle = `rgb(${rgb})`;
+    ctx.lineWidth   = lineW;
+    ctx.fillStyle   = `rgba(${rgb}, ${isSelected ? 0.25 : 0.15})`;
+
+    if (e.r !== undefined) {
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    } else if (e.w !== undefined) {
+      ctx.beginPath();
+      ctx.rect(e.x - e.w / 2, e.y - e.h / 2, e.w, e.h);
+      ctx.fill(); ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, 4, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    }
+
+    ctx.fillStyle = `rgb(${rgb})`;
+    ctx.font = `bold ${Math.min(11, (e.w || 20) / 3 + 6)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(e.name, e.x, e.y);
+  });
+}
+
+// ── Sidebar rendering ─────────────────────────────────────────
+
+function renderSidebar() {
+  const list = document.getElementById('entry-list');
+  list.innerHTML = '';
+
+  entries[mode].forEach((e, i) => {
+    const div = document.createElement('div');
+    div.className = 'entry' + (i === selectedIdx ? ' selected' : '');
+    div.innerHTML = `
+      <span class="entry-name">${e.name}</span>
+      <span class="entry-pos">${e.r !== undefined
+        ? `(${e.x},${e.y}) r=${e.r}`
+        : e.w !== undefined
+          ? `(${e.x},${e.y}) ${e.w}×${e.h}`
+          : `(${e.x},${e.y})`
+      }</span>
+      <span class="entry-del" onclick="event.stopPropagation();deleteEntry(${i})">✕</span>
+    `;
+    div.onclick = () => selectEntry(i);
+    list.appendChild(div);
+  });
+
+  document.getElementById('entry-count').textContent = `${entries[mode].length} entries`;
+}
+
+// ── JSON export ──────────────────────────────────────────────
+
+function buildJSON() {
+  const out = {};
+
+  entries[mode].forEach(e => {
+    if (e.r !== undefined) {
+      out[e.name] = { x: e.x, y: e.y, r: e.r };
+    } else if (e.w !== undefined) {
+      out[e.name] = { x: e.x, y: e.y, w: e.w, h: e.h };
+    } else {
+      out[e.name] = { x: e.x, y: e.y };
+    }
+  });
+
+  return JSON.stringify(out, null, 2);
+}
+
+function updatePreview() {
+  document.getElementById('json-preview').value = buildJSON();
+}
+
+function copyJSON() {
+  const text = buildJSON();
+  navigator.clipboard.writeText(text).then(() => setStatus('JSON copied to clipboard!'));
+}
+
+function downloadJSON() {
+  const text = buildJSON();
+  const blob = new Blob([text], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${mode}-layout.json`;
+  a.click();
+  setStatus(`Downloaded ${mode}-layout.json`);
+}
+
+function exportJSON() {
+  updatePreview();
+  copyJSON();
+}
+
+// ── Load existing layout.json ────────────────────────────────
+
+function loadExistingLayout() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const full = JSON.parse(ev.target.result);
+        const section = full[mode];
+        if (!section) { setStatus('No ' + mode + ' section found'); return; }
+        entries[mode] = [];
+        const src = section.keys || section.buttons || {};
+        for (const [name, v] of Object.entries(src)) {
+          entries[mode].push({ name, ...v });
+        }
+        renderOverlay();
+        renderSidebar();
+        updatePreview();
+        setStatus(`Loaded ${entries[mode].length} entries from layout.json`);
+      } catch(err) {
+        setStatus('Error: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ── Keyboard shortcuts ───────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  const inInput = document.activeElement.tagName === 'INPUT';
+
+  // D = Draw mode, M = Move mode
+  if (!inInput) {
+    if (e.key === 'd' || e.key === 'D') { setEditMode('draw'); return; }
+    if (e.key === 'm' || e.key === 'M') { setEditMode('move'); return; }
+  }
+
+  // Delete selected entry
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIdx >= 0 && !inInput) {
+    deleteEntry(selectedIdx);
+    selectedIdx = -1;
+  }
+  // Escape = deselect / cancel drag
+  if (e.key === 'Escape') {
+    isMoving = false;
+    isDragging = false;
+    selectedIdx = -1;
+    document.getElementById('drag-rect').style.display = 'none';
+    if (editMode === 'move') {
+      document.getElementById('interaction-canvas').className = 'move-mode';
+    }
+    renderOverlay();
+    renderSidebar();
+  }
+});
+
+// Reset hover when mouse leaves the canvas
+document.getElementById('interaction-canvas').addEventListener('mouseleave', () => {
+  if (editMode === 'move' && !isMoving) {
+    hoveredIdx = -1;
+    document.getElementById('interaction-canvas').className = 'move-mode';
+    renderOverlay();
+  }
+});
+
+// ── Utility ──────────────────────────────────────────────────
+
+function setStatus(msg) {
+  document.getElementById('status-msg').textContent = msg;
+}
+
+// ── Init ─────────────────────────────────────────────────────
+
+// Try to auto-load the keyboard image from ../assets if running locally
+window.addEventListener('load', () => {
+  setStatus('Ready — load an image with 📂 or drag-and-drop below');
+});
+
+// Drag-and-drop image loading
+document.getElementById('canvas-panel').addEventListener('dragover', e => e.preventDefault());
+document.getElementById('canvas-panel').addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const img = document.getElementById('base-img');
+  img.src = URL.createObjectURL(file);
+  setStatus(`Loaded: ${file.name}`);
+});
+</script>
+</body>
+</html>

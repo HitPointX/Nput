@@ -1,0 +1,18 @@
+# ── Build outputs ──────────────────────────────────────────
+backend/target/
+frontend/node_modules/
+frontend/dist/
+dist-app/
+
+# ── Local tooling & session state ──────────────────────────
+.claude/
+data/
+
+# ── Reference material (study-only, not part of the project) ──
+reference/
+
+# ── OS noise ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
